@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="./libs/d3.js"></script>
+    <script src="https://d3js.org/topojson.v1.min.js"></script>
+    <title>MA Map</title>
+    <style>
+        #tooltip {
+            position: absolute;
+            opacity: 0;
+            top: 0;
+            left: 0;
+            width: auto;
+            padding: 10px;
+            background: white;
+            font-family: sans-serif;
+            font-size: medium;
+            border-radius: 2px;
+            line-height: 1;
+        }
+        
+        path {
+            stroke-width: .5px;
+            stroke: black
+        }
+        
+        path:hover {
+            opacity: .6;
+            stroke: black;
+            stroke-width: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <h3>
+        2. Population Change between each available year (e.g 1980 and 1990) in each town.
+    </h3>
+
+    <div id="tooltip"></div>
+
+    <div class="infobox">
+        <h3 class="dataYear">Data Year</h3>
+    </div>
+
+    <div id="buttons"></div>
+
+
+    <script>
+
+        /*-------------------------------------------------------*/
+        /*------------------- Window setting --------------------*/
+        /*-------------------------------------------------------*/
+        // dimension of the page
+        const window_dims = {
+            width: window.innerWidth,
+            height: window.innerHeight
+        };
+        const margin = window_dims.width * .2
+
+        /*-------------------------------------------------------*/
+        /*-----------------parallel load data--------------------*/
+        /*-------------------------------------------------------*/
+
+        // a topojson file containing population of each town in different years
+        const MA_counties = "./data/towns.topojson"
+            // gini index per county
+        const gini_index = "./data/gini_index.csv"
+
+        
+        // open both files
+        Promise.all([
+            d3.json(MA_counties),
+            d3.csv(gini_index)
+        ]).then(data => {
+            // topology data
+            const topo_data = data[0];
+            // gini index data
+            const csv_data = data[1];
+
+            /*-------------------------------------------------------*/
+            /*-----------------Topojson data handling----------------*/
+            /*-------------------------------------------------------*/
+            // if topojson file is imported we need to 
+            // convert topology data to geojson 
+            const geojson = topojson.feature(topo_data, topo_data.objects.ma);
+            console.log(geojson);
+
+            /*-------------------------------------------------------*/
+            /*----------------------Projections----------------------*/
+            /*-------------------------------------------------------*/
+            const projections = [
+                d3.geoAzimuthalEqualArea(), //Azimuthal projections project the sphere directly onto a plane.
+                d3.geoAlbersUsa(), // USA conic projection
+                d3.geoAlbers(), // equal-area conic projection
+                d3.geoMercator(), // cylindrical projection
+                d3.geoNaturalEarth1(), // pseudocylindrical projection designed by Tom Patterson
+                d3.geoEqualEarth(), // Equal Earth projection, by Bojan Šavrič et al., 2018.
+                d3.geoConicEqualArea(), //equal-area conic projection
+                d3.geoEquirectangular(), //Cylindrical Projections
+                d3.geoOrthographic()
+            ]
+
+            /*-------------------------------------------------------*/
+            /*----------------geoPath generator----------------------*/
+            /*-------------------------------------------------------*/
+
+            const geoPath_generator = d3.geoPath()
+                .projection(projections[3].fitSize([window_dims.width - margin, window_dims.height - margin], geojson))
+
+            /*-------------------------------------------------------*/
+            /*----------------------Color Scaling--------------------*/
+            /*-------------------------------------------------------*/
+            ////https://observablehq.com/@d3/working-with-color
+            var colorInterpolator = d3.interpolateRgbBasis(["blue", "steelblue", "green", "purple", "red"])
+                // if the data is scaled using log scale
+
+
+            // array with decades
+            const decades = ['POP1980','POP1990','POP2000','POP2010'];
+
+
+
+            /*-------------------------------------------------------*/
+            /*---------------------- Tooltip ------------------------*/
+            /*-------------------------------------------------------*/
+            const tooltip = d3.select("#tooltip");
+
+            /*--------------------------------------------------------*/
+            /*----------------- channelling marks --------------------*/
+            /*--------------------------------------------------------*/
+
+
+            // Append a SVG element to body, then append a path for the boundaries
+            let svg = d3.select("body").append("svg")
+                .attr("width", "100vw")
+                .attr("height", "100vh");
+            
+            let myMap = svg.selectAll("path")
+                .data(geojson.features)
+                .enter()
+                .append("path")
+                .attr("d", d => geoPath_generator(d))
+                .attr("fill","white")
+                //.attr("fill", d => colorInterpolator(logScale(d['properties']['POP2010'])))
+                //.attr("fill", d => colorInterpolator(linearScale(d['properties']['POP1980'])))
+                .on("mouseenter", (m, d) => {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9)
+                    tooltip.html(d['properties']['TOWN'])
+                        .style("left", m.clientX + "px")
+                        .style("top", m.clientY + "px");
+                })
+                .on("mousemove", (m, d) => {
+                    tooltip.style("opacity", .9)
+                })
+                .on("mouseout", (m, d) => {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", 0)
+                })
+
+                function updateYear(selectedYear) {
+                    console.log(`I am ${selectedYear}`)
+                    let logScale = d3.scaleLog()
+                    .domain(d3.extent(geojson.features, (d) => {
+                    return d['properties'][selectedYear]
+                    }))
+
+                    // if the data is scaled using linear scale
+                    let linearScale = d3.scaleLinear()
+                    .domain(d3.extent(geojson.features, (d) => {
+                    return d['properties'][selectedYear]
+                    }))
+                
+                    myMap.transition()
+                    .delay(function(d,i){return i*2})
+                    .duration(800)
+                    .style("fill",function (d)
+                    {
+                        return colorInterpolator(linearScale(d['properties'][selectedYear]));
+
+                    })
+
+                    d3.select(".infobox .dataYear").text(selectedYear);
+                }
+
+                const years = [
+                "POP1980",
+                "POP1990",
+                "POP2000",
+                "POP2010",
+                "POPCH00_10",
+                "POPCH80_90",
+                "POPCH90_00",
+                ];
+                let interface = d3.selectAll("#buttons");
+                interface.selectAll('buttons')
+                    .data(years)
+                    .enter()
+                    .append("button")
+                    .text(d=>d)
+                    .on("click",(m,d)=>{
+                        console.log(m,d)
+                        updateYear(d)})
+        })
+    </script>
+
+</body>
+
+</html>
