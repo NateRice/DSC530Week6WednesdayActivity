@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="./libs/d3.js"></script>
+    <script src="https://d3js.org/topojson.v1.min.js"></script>
+    <title>MA Map</title>
+    <style>
+        #tooltip {
+            position: absolute;
+            opacity: 0;
+            top: 0;
+            left: 0;
+            width: auto;
+            padding: 10px;
+            background: white;
+            font-family: sans-serif;
+            font-size: medium;
+            border-radius: 2px;
+            line-height: 1;
+        }
+        
+        path {
+            stroke-width: .5px;
+            stroke: black
+        }
+        
+        path:hover {
+            opacity: .6;
+            stroke: black;
+            stroke-width: 4px;
+        }
+        path.c25021 {
+            fill:  #CCFF00;
+        }
+
+        path.c25027 {
+            fill: #CCFFCC;
+        }
+        path.c25027 {
+            fill: #FFFF00;
+        }
+        path.c25001 {
+            fill: ##CCCC99;
+        }
+        path.c25001 {
+            fill: #CCCCCC;
+        }
+        path.c25005 {
+            fill:  #CCCCFF;
+        }
+        path.c25009 {
+            fill:  #FFCCFF;
+        }
+        path.c25013 {
+            fill: #FFCCCC;
+        }
+        path.c25011 {
+            fill:  #FFCC00;
+        }
+        path.c25003 {
+            fill: #FF99FF;
+        }
+        path.c25015 {
+            fill: #CC0000;
+        }
+        path.c25017 {
+            fill: #6600FF;
+        }
+        path.c25023 {
+            fill: #669900;
+        }
+        path.c25025 {
+            fill: #6699FF;
+        }
+
+        path.c25019 {
+            fill: #66CCCC;
+        }
+
+        path.c25007 {
+            fill: #66FFCC;
+        }
+    </style>
+</head>
+
+<body>
+    <h3>
+        3. Color by County
+    </h3>
+    <div id="tooltip"></div>
+    <script>
+        /*-------------------------------------------------------*/
+        /*------------------- Window setting --------------------*/
+        /*-------------------------------------------------------*/
+        // dimension of the page
+        const window_dims = {
+            width: window.innerWidth,
+            height: window.innerHeight
+        };
+        const margin = window_dims.width * .2
+
+        /*-------------------------------------------------------*/
+        /*-----------------parallel load data--------------------*/
+        /*-------------------------------------------------------*/
+
+        // a topojson file containing population of each town in different years
+        const MA_counties = "./data/towns.topojson"
+            // gini index per county
+        const gini_index = "./data/gini_index.csv"
+        
+        // open both files
+        Promise.all([
+            d3.json(MA_counties),
+            d3.csv(gini_index)
+        ]).then(data => {
+            // topology data
+            const topo_data = data[0];
+            // gini index data
+            const csv_data = data[1];
+
+            /*-------------------------------------------------------*/
+            /*-----------------Topojson data handling----------------*/
+            /*-------------------------------------------------------*/
+            // if topojson file is imported we need to 
+            // convert topology data to geojson 
+            const geojson = topojson.feature(topo_data, topo_data.objects.ma);
+            console.log(geojson);
+
+            let lst =geojson.features.map(d=>d['properties']['FIPS_STCO']);
+                lst = new Set(lst)
+                console.log(lst)
+
+            /*-------------------------------------------------------*/
+            /*----------------------Projections----------------------*/
+            /*-------------------------------------------------------*/
+            const projections = [
+                d3.geoAzimuthalEqualArea(), //Azimuthal projections project the sphere directly onto a plane.
+                d3.geoAlbersUsa(), // USA conic projection
+                d3.geoAlbers(), // equal-area conic projection
+                d3.geoMercator(), // cylindrical projection
+                d3.geoNaturalEarth1(), // pseudocylindrical projection designed by Tom Patterson
+                d3.geoEqualEarth(), // Equal Earth projection, by Bojan Šavrič et al., 2018.
+                d3.geoConicEqualArea(), //equal-area conic projection
+                d3.geoEquirectangular(), //Cylindrical Projections
+                d3.geoOrthographic()
+            ]
+
+            /*-------------------------------------------------------*/
+            /*----------------geoPath generator----------------------*/
+            /*-------------------------------------------------------*/
+
+            const geoPath_generator = d3.geoPath()
+                .projection(projections[3].fitSize([window_dims.width - margin, window_dims.height - margin], geojson))
+
+            /*-------------------------------------------------------*/
+            /*---------------------- Tooltip ------------------------*/
+            /*-------------------------------------------------------*/
+            const tooltip = d3.select("#tooltip");
+
+            /*--------------------------------------------------------*/
+            /*----------------- channelling marks --------------------*/
+            /*--------------------------------------------------------*/
+
+
+            // Append a SVG element to body, then append a path for the boundaries
+            let svg = d3.select("body").append("svg")
+                .attr("width", "100vw")
+                .attr("height", "100vh");
+            
+            let myMap = svg.selectAll("path")
+                .data(geojson.features)
+                .enter()
+                .append("path")
+                .attr("d", d => geoPath_generator(d))
+                .attr("fill","white")
+                .attr("class",d=>`c${d['properties']['FIPS_STCO']}`)
+
+                .on("mouseenter", (m, d) => {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9)
+                    tooltip.html(d['properties']['TOWN'])
+                        .style("left", m.clientX + "px")
+                        .style("top", m.clientY + "px");
+                })
+                .on("mousemove", (m, d) => {
+                    tooltip.style("opacity", .9)
+                })
+                .on("mouseout", (m, d) => {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", 0)
+                })
+
+                myMap.transition()
+                .delay(function(d,i){return i*2})
+                .duration(800)
+                .style("fill",function (d)
+                {
+                    return d['properties']['FIPS_STCO'];
+
+                })
+        })
+    </script>
+</body>
+</html>
